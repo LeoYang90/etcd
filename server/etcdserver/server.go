@@ -319,6 +319,21 @@ func (bh *backendHooks) OnPreCommitUnsafe(tx backend.BatchTx) {
 	}
 }
 
+func (bh *backendHooks) OnPreCommitIndexAndTermUnsafe() (uint64, uint64) {
+	return bh.indexer.UnsafeConsistentIndexAndTerm()
+}
+
+func (bh *backendHooks) OnPreCommitWithIndexAndTermUnsafe(tx backend.BatchTx, index uint64, term uint64) {
+	bh.indexer.UnsafeSaveWithIndexAndTerm(tx, index, term)
+	bh.confStateLock.Lock()
+	defer bh.confStateLock.Unlock()
+	if bh.confStateDirty {
+		schema.MustUnsafeSaveConfStateToBackend(bh.lg, tx, &bh.confState)
+		// save bh.confState
+		bh.confStateDirty = false
+	}
+}
+
 func (bh *backendHooks) SetConfState(confState *raftpb.ConfState) {
 	bh.confStateLock.Lock()
 	defer bh.confStateLock.Unlock()
