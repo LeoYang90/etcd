@@ -337,6 +337,29 @@ func (t *batchTxBuffered) commit(stop bool) {
 }
 
 func (t *batchTxBuffered) unsafeCommit(stop bool) {
+	for bucketID := range t.backend.readTx.buf.buckets {
+		if bucketID == KeyBucket.ID() {
+			put := func(k, v []byte, needPut bool) error {
+				if needPut {
+					if seq, ok := t.buf.bucket2seq[bucketID]; ok {
+						t.batchTx.unsafePutWithoutAddPending(KeyBucket, k, v, seq)
+					} else {
+						t.batchTx.unsafePutWithoutAddPending(KeyBucket, k, v, true)
+					}
+				}
+				return nil
+			}
+
+			err := t.backend.readTx.buf.ForEachWithNeedPutAsync(KeyBucket, put)
+			if err != nil {
+				if t.backend.lg != nil {
+					t.backend.lg.Fatal("failed to ForEach unsafePut", zap.Error(err))
+				}
+
+				return
+			}
+		}
+	}
 	if t.backend.readTx.tx != nil {
 		// wait all store read transactions using the current boltdb tx to finish,
 		// then close the boltdb tx

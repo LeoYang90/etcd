@@ -104,7 +104,7 @@ func (s *store) WriteAsync(trace *traceutil.Trace) TxnWrite {
 
 func (tw *storeTxnWrite) UpdateReadView() {
 	if tw.tx == nil {
-		readTx := tw.s.b.ConcurrentReadTx()
+		readTx := tw.s.b.ReadTx()
 		readTx.RLock()
 		tw.tx = readTx
 	}
@@ -155,6 +155,9 @@ func (tw *storeTxnWrite) End() {
 }
 
 func (tw *storeTxnWrite) EndAsync() {
+	if tw.tx != nil {
+		tw.tx.RUnlock()
+	}
 	// only update index if the txn modifies the mvcc state.
 	if len(tw.changes) != 0 {
 		// hold revMu lock to prevent new read txns from opening until writeback.
