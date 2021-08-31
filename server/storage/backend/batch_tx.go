@@ -566,5 +566,5 @@ func (t *batchTxBufferedAsync) UnsafeSeqPutAsync(bucket Bucket, key []byte, valu
 
 func (t *batchTxBufferedAsync) Flash2ReadTx(readTx ReadTx) {
 	buf := readTx.GetBuffer().(*txReadBuffer)
-	t.asyncBuf.writebackNoReset(buf)
+	t.asyncBuf.writeback(buf)
 }
