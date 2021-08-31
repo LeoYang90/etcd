@@ -104,7 +104,7 @@ func (s *store) WriteAsync(trace *traceutil.Trace) TxnWrite {
 
 func (tw *storeTxnWrite) UpdateReadView() {
 	if tw.tx == nil {
-		readTx := tw.s.b.ConcurrentReadTx()
+		readTx := tw.s.b.ReadTx()
 		readTx.RLock()
 		tw.tx = readTx
 	}
