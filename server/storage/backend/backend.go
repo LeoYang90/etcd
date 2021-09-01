@@ -215,6 +215,7 @@ func newBackend(bcfg BackendConfig) *backend {
 				buckets: make(map[BucketID]*bolt.Bucket),
 				txWg:    new(sync.WaitGroup),
 				txMu:    new(sync.RWMutex),
+				mu:      new(sync.RWMutex),
 			},
 		},
 		txReadBufferCache: txReadBufferCache{
