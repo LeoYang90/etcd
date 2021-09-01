@@ -416,9 +416,11 @@ func (t *batchTxBuffered) UnsafeSeqPut(bucket Bucket, key []byte, value []byte) 
 func (t *batchTxBuffered) UnsafeSeqPutRev(bucket Bucket, key []byte, value []byte, rev int64) {
 	t.batchTx.UnsafeSeqPut(bucket, key, value)
 	t.buf.putSeq(bucket, key, value)
+	t.buf.revMu.Lock()
 	if rev != -1 {
 		t.buf.bufRev = rev
 	}
+	t.buf.revMu.Unlock()
 }
 
 type batchTxBufferedAsync struct {
@@ -456,7 +458,7 @@ func (t *batchTxBufferedAsync) LockAsync() {
 func (t *batchTxBufferedAsync) UnlockAsync() {
 	if t.asyncBufPending != 0 {
 		t.backend.readTx.Lock() // blocks txReadBuffer for writing.
-		t.asyncBuf.writeBackWithRev(t.backend.readTx.buf)
+		t.asyncBuf.writeback(t.backend.readTx.buf)
 		t.backend.readTx.Unlock()
 	}
 	t.asyncBufLock.Unlock()
@@ -603,12 +605,14 @@ func (t *batchTxBufferedAsync) UnsafeSeqPutAsync(bucket Bucket, key []byte, valu
 func (t *batchTxBufferedAsync) UnsafeSeqPutAsyncRev(bucket Bucket, key []byte, value []byte, rev int64) {
 	t.asyncBuf.putSeqAsync(bucket, key, value)
 	t.asyncBufPending++
+	t.buf.revMu.Lock()
 	if rev != -1 {
 		t.buf.bufRev = rev
 	}
+	t.buf.revMu.Unlock()
 }
 
 func (t *batchTxBufferedAsync) Flash2ReadTx(readTx ReadTx) {
 	buf := readTx.GetBuffer().(*txReadBuffer)
-	t.asyncBuf.writeBackWithRev(buf)
+	t.asyncBuf.writeback(buf)
 }

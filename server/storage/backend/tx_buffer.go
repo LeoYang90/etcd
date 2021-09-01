@@ -18,6 +18,7 @@ import (
 	"bytes"
 	"math"
 	"sort"
+	"sync"
 )
 
 const bucketBufferInitialSize = 512
@@ -46,6 +47,8 @@ type txWriteBuffer struct {
 
 	// store revision for keys bucket
 	bufRev int64
+
+	revMu sync.RWMutex
 }
 
 func (txw *txWriteBuffer) put(bucket Bucket, k, v []byte) {
@@ -97,14 +100,12 @@ func (txw *txWriteBuffer) reset() {
 	}
 }
 
-func (txw *txWriteBuffer) writeBackWithRev(txr *txReadBuffer) {
+func (txw *txWriteBuffer) writeback(txr *txReadBuffer) {
+	txw.revMu.RLock()
 	if txr.bufMinRev == math.MaxInt64 {
 		txr.bufMinRev = txw.bufRev
 	}
-	txw.writeback(txr)
-}
-
-func (txw *txWriteBuffer) writeback(txr *txReadBuffer) {
+	txw.revMu.RUnlock()
 	for k, wb := range txw.buckets {
 		rb, ok := txr.buckets[k]
 		if !ok {
