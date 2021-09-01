@@ -456,7 +456,7 @@ func (t *batchTxBufferedAsync) LockAsync() {
 func (t *batchTxBufferedAsync) UnlockAsync() {
 	if t.asyncBufPending != 0 {
 		t.backend.readTx.Lock() // blocks txReadBuffer for writing.
-		t.asyncBuf.writeback(t.backend.readTx.buf)
+		t.asyncBuf.writeBackWithRev(t.backend.readTx.buf)
 		t.backend.readTx.Unlock()
 	}
 	t.asyncBufLock.Unlock()
@@ -610,5 +610,5 @@ func (t *batchTxBufferedAsync) UnsafeSeqPutAsyncRev(bucket Bucket, key []byte, v
 
 func (t *batchTxBufferedAsync) Flash2ReadTx(readTx ReadTx) {
 	buf := readTx.GetBuffer().(*txReadBuffer)
-	t.asyncBuf.writeback(buf)
+	t.asyncBuf.writeBackWithRev(buf)
 }

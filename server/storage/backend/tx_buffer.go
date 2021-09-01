@@ -97,10 +97,14 @@ func (txw *txWriteBuffer) reset() {
 	}
 }
 
-func (txw *txWriteBuffer) writeback(txr *txReadBuffer) {
+func (txw *txWriteBuffer) writeBackWithRev(txr *txReadBuffer) {
 	if txr.bufMinRev == math.MaxInt64 {
 		txr.bufMinRev = txw.bufRev
 	}
+	txw.writeback(txr)
+}
+
+func (txw *txWriteBuffer) writeback(txr *txReadBuffer) {
 	for k, wb := range txw.buckets {
 		rb, ok := txr.buckets[k]
 		if !ok {
