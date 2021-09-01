@@ -103,7 +103,7 @@ func (s *store) WriteAsync(trace *traceutil.Trace) TxnWrite {
 	tx := s.b.BatchTxAsync()
 	tx.LockAsync()
 	tw := &storeTxnWrite{
-		storeTxnRead: storeTxnRead{s, nil, 0, 0, trace},
+		storeTxnRead: storeTxnRead{s, nil, 0, 0, ReadTxMode(0),trace},
 		batchTxAsync: tx,
 		beginRev:     s.currentRev,
 		changes:      make([]mvccpb.KeyValue, 0, 4),

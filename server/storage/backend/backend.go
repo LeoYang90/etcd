@@ -53,7 +53,7 @@ type Backend interface {
 	BatchTxAsync() BatchTxAsync
 	// ConcurrentReadTx returns a non-blocking read transaction.
 	ConcurrentReadTx() ReadTx
-	//ConcurrentReadTxNoCopy() ReadTx
+	ConcurrentReadTxNoCopy() ReadTx
 
 	Snapshot() Snapshot
 	Hash(ignores func(bucketName, keyName []byte) bool) (uint32, error)
