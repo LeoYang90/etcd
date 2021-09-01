@@ -431,13 +431,12 @@ type batchTxBufferedAsync struct {
 }
 
 func newBatchTxBufferedAsync(backend *backend) *batchTxBufferedAsync {
-	twb := txWriteBuffer{
+	tx := &batchTxBufferedAsync{}
+	tx.batchTxBuffered = newBatchTxBuffered(backend)
+	tx.asyncBuf = txWriteBuffer{
 		txBuffer:   txBuffer{make(map[BucketID]*bucketBuffer)},
 		bucket2seq: make(map[BucketID]bool),
 	}
-	tx := &batchTxBufferedAsync{}
-	tx.batchTxBuffered = newBatchTxBuffered(backend)
-	tx.asyncBuf = twb
 
 	return tx
 }
