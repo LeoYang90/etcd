@@ -54,6 +54,7 @@ type BatchTx interface {
 	UnsafeDeleteBucket(bucket Bucket)
 	UnsafePut(bucket Bucket, key []byte, value []byte)
 	UnsafeSeqPut(bucket Bucket, key []byte, value []byte)
+	UnsafeSeqPutRev(bucket Bucket, key []byte, value []byte, rev int64)
 	UnsafeDelete(bucket Bucket, key []byte)
 	// Commit commits a previous tx and begins a new writable one.
 	Commit()
@@ -65,6 +66,7 @@ type BatchTxAsync interface {
 	BatchTx
 	UnsafePutAsync(bucket Bucket, key []byte, value []byte)
 	UnsafeSeqPutAsync(bucket Bucket, key []byte, value []byte)
+	UnsafeSeqPutAsyncRev(bucket Bucket, key []byte, value []byte, rev int64)
 
 	Flash2ReadTx(readTx ReadTx)
 
@@ -165,6 +167,18 @@ func (t *batchTx) unsafePutWithoutAddPending(bucketType Bucket, key []byte, valu
 			zap.Error(err),
 		)
 	}
+}
+
+func (t *batchTx) UnsafeRangeWithLock(bucketType Bucket, key, endKey []byte, limit int64, b Backend) ([][]byte, [][]byte) {
+	panic("batchTx UnsafeRangeWithLock should not be called")
+}
+
+func (t *batchTx) UnsafeGetBuffer() interface{} {
+	panic("batchTx UnsafeGetBuffer should not be called")
+}
+
+func (t *batchTx) AccessBufferNeedLock() bool {
+	return false
 }
 
 // UnsafeRange must be called holding the lock on the tx.
@@ -370,7 +384,15 @@ func (t *batchTxBuffered) unsafeCommit(stop bool) {
 			}
 		}(t.backend.readTx.tx, t.backend.readTx.txWg)
 		t.backend.readTx.reset()
-		t.backend.readTx.buf.reset()
+		version := t.backend.readTx.buf.bufVersion
+		// t.backend.readTx.buf is used for ConcurrentReadTxNoCopyMode
+		// t.backend.readTx.buf can not be reset simply
+		// create a new one, old one can still use
+		t.backend.readTx.buf = &txReadBuffer{
+			txBuffer:   txBuffer{make(map[BucketID]*bucketBuffer)},
+			bufVersion: version,
+			bufMinRev:  math.MaxInt64,
+		}
 	}
 
 	t.batchTx.commit(stop)
@@ -388,6 +410,14 @@ func (t *batchTxBuffered) UnsafePut(bucket Bucket, key []byte, value []byte) {
 func (t *batchTxBuffered) UnsafeSeqPut(bucket Bucket, key []byte, value []byte) {
 	t.batchTx.UnsafeSeqPut(bucket, key, value)
 	t.buf.putSeq(bucket, key, value)
+}
+
+func (t *batchTxBuffered) UnsafeSeqPutRev(bucket Bucket, key []byte, value []byte, rev int64) {
+	t.batchTx.UnsafeSeqPut(bucket, key, value)
+	t.buf.putSeq(bucket, key, value)
+	if rev != -1 {
+		t.buf.bufRev = rev
+	}
 }
 
 type batchTxBufferedAsync struct {
@@ -516,8 +546,13 @@ func (t *batchTxBufferedAsync) unsafeRollbackTx() {
 				}
 			}
 		}(t.backend.readTx.tx, t.backend.readTx.txWg)
+		version := t.backend.readTx.buf.bufVersion
 		t.backend.readTx.reset()
-		t.backend.readTx.committingBuf.reset()
+		t.backend.readTx.committingBuf = &txReadBuffer{
+			txBuffer:   txBuffer{make(map[BucketID]*bucketBuffer)},
+			bufVersion: version,
+			bufMinRev:  math.MaxInt64,
+		}
 	}
 }
 
@@ -562,6 +597,14 @@ func (t *batchTxBufferedAsync) UnsafePutAsync(bucket Bucket, key []byte, value [
 func (t *batchTxBufferedAsync) UnsafeSeqPutAsync(bucket Bucket, key []byte, value []byte) {
 	t.asyncBuf.putSeqAsync(bucket, key, value)
 	t.asyncBufPending++
+}
+
+func (t *batchTxBufferedAsync) UnsafeSeqPutAsyncRev(bucket Bucket, key []byte, value []byte, rev int64) {
+	t.asyncBuf.putSeqAsync(bucket, key, value)
+	t.asyncBufPending++
+	if rev != -1 {
+		t.buf.bufRev = rev
+	}
 }
 
 func (t *batchTxBufferedAsync) Flash2ReadTx(readTx ReadTx) {

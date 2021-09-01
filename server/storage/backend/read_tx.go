@@ -15,6 +15,7 @@
 package backend
 
 import (
+	"encoding/binary"
 	"math"
 	"sync"
 
@@ -32,17 +33,24 @@ type ReadTx interface {
 	RUnlock()
 
 	UnsafeRange(bucket Bucket, key, endKey []byte, limit int64) (keys [][]byte, vals [][]byte)
+	UnsafeRangeWithLock(bucketType Bucket, key, endKey []byte, limit int64, b Backend) (keys [][]byte, vals [][]byte)
 	UnsafeForEach(bucket Bucket, visitor func(k, v []byte) error) error
 
 	GetBuffer() interface{}
+	GetCommittingBuffer() interface{}
+	AccessBufferNeedLock() bool
 }
 
 // Base type for readTx and concurrentReadTx to eliminate duplicate functions between these
 type baseReadTx struct {
 	// mu protects accesses to the txReadBuffer
-	mu            sync.RWMutex
+	mu            *sync.RWMutex
 	buf           *txReadBuffer
 	committingBuf *txReadBuffer
+	bufferCopied  bool
+
+	bufMinRev           int64
+	committingBufMinRev int64
 
 	// TODO: group and encapsulate {txMu, tx, buckets, txWg}, as they share the same lifecycle.
 	// txMu protects accesses to buckets and tx on Range requests.
@@ -51,6 +59,10 @@ type baseReadTx struct {
 	buckets map[BucketID]*bolt.Bucket
 	// txWg protects tx from being rolled back at the end of a batch interval until all reads using this tx are done.
 	txWg *sync.WaitGroup
+}
+
+func (baseReadTx *baseReadTx) UnsafeGetBuffer() interface{} {
+	return baseReadTx.buf
 }
 
 func (baseReadTx *baseReadTx) UnsafeForEach(bucket Bucket, visitor func(k, v []byte) error) error {
@@ -136,7 +148,117 @@ func (baseReadTx *baseReadTx) UnsafeRange(bucketType Bucket, key, endKey []byte,
 	return append(k2, keys...), append(v2, vals...)
 }
 
+func bytesToRev(bytes []byte) int64 {
+	return int64(binary.BigEndian.Uint64(bytes[0:8]))
+}
+
+func (baseReadTx *baseReadTx) UnsafeRangeWithLock(bucketType Bucket, key, endKey []byte, limit int64, b Backend) ([][]byte, [][]byte) {
+	if endKey == nil {
+		// forbid duplicates for single keys
+		limit = 1
+	}
+	if limit <= 0 {
+		limit = math.MaxInt64
+	}
+	if !bucketType.IsSafeRangeBucket() {
+		panic("do not use UnsafeRangeWithLock on non-keys bucket")
+	}
+	keyRev := bytesToRev(key)
+	endKeyRev := int64(0)
+	if endKey != nil {
+		endKeyRev = bytesToRev(endKey)
+	}
+	var keys [][]byte
+	var vals [][]byte
+	var needBufSearch bool
+	if baseReadTx.bufMinRev == math.MaxInt64 || baseReadTx.committingBufMinRev == math.MaxInt64 {
+		needBufSearch = true
+	}
+	if baseReadTx.bufMinRev != math.MaxInt64 && (keyRev >= baseReadTx.bufMinRev || endKeyRev >= baseReadTx.bufMinRev) {
+		needBufSearch = true
+	}
+	if baseReadTx.committingBufMinRev != math.MaxInt64 && (keyRev >= baseReadTx.committingBufMinRev || endKeyRev >= baseReadTx.committingBufMinRev) {
+		needBufSearch = true
+	}
+
+	lockHeld := false
+	if needBufSearch {
+		baseReadTx.mu.RLock()
+		lockHeld = true
+		readBuff := b.ReadTx().GetBuffer().(*txReadBuffer)
+		readCommittingBuff := b.ReadTx().GetCommittingBuffer().(*txReadBuffer)
+		if baseReadTx.buf != readBuff && baseReadTx.buf != readCommittingBuff && baseReadTx.committingBuf != readBuff && baseReadTx.committingBuf != readCommittingBuff {
+			// backend.readTx.buf has already been updated to a new one by unsafeCommit
+			// batchTxBuffered will write back to the new readTx.buf instead of the baseReadTx.buf
+			// baseReadTx.buf do not need be protected by readTx.mu
+			lockHeld = false
+			baseReadTx.mu.RUnlock()
+		}
+		if keyRev >= baseReadTx.buf.bufMinRev || endKeyRev >= baseReadTx.buf.bufMinRev {
+			keys, vals = baseReadTx.buf.Range(bucketType, key, endKey, limit)
+			if int64(len(keys)) == limit {
+				if lockHeld {
+					baseReadTx.mu.RUnlock()
+				}
+				return keys, vals
+			}
+		}
+
+		if baseReadTx.committingBuf != readBuff && baseReadTx.committingBuf != readCommittingBuff {
+			// backend.readTx.buf has already been updated to a new one by unsafeCommit
+			// batchTxBuffered will write back to the new readTx.buf instead of the baseReadTx.buf
+			// baseReadTx.buf do not need be protected by readTx.mu
+			lockHeld = false
+			baseReadTx.mu.RUnlock()
+		}
+		if keyRev >= baseReadTx.committingBuf.bufMinRev || endKeyRev >= baseReadTx.committingBuf.bufMinRev {
+			committingKeys, committingVals := baseReadTx.committingBuf.Range(bucketType, key, endKey, limit)
+			keys = append(keys, committingKeys...)
+			vals = append(vals, committingVals...)
+			if int64(len(keys)) == limit {
+				if lockHeld {
+					baseReadTx.mu.RUnlock()
+				}
+				return keys, vals
+			}
+		}
+		if lockHeld {
+			baseReadTx.mu.RUnlock()
+		}
+	}
+
+	// find/cache bucket
+	bn := bucketType.ID()
+	baseReadTx.txMu.RLock()
+	bucket, ok := baseReadTx.buckets[bn]
+	baseReadTx.txMu.RUnlock()
+	lockHeld = false
+	if !ok {
+		baseReadTx.txMu.Lock()
+		lockHeld = true
+		bucket = baseReadTx.tx.Bucket(bucketType.Name())
+		baseReadTx.buckets[bn] = bucket
+	}
+
+	// ignore missing bucket since may have been created in this batch
+	if bucket == nil {
+		if lockHeld {
+			baseReadTx.txMu.Unlock()
+		}
+		return keys, vals
+	}
+	if !lockHeld {
+		baseReadTx.txMu.Lock()
+	}
+	c := bucket.Cursor()
+	baseReadTx.txMu.Unlock()
+
+	k2, v2 := unsafeRange(c, key, endKey, limit-int64(len(keys)))
+	return append(k2, keys...), append(v2, vals...)
+}
+
 func (baseReadTx *baseReadTx) GetBuffer() interface{} { return baseReadTx.buf }
+func (baseReadTx *baseReadTx) GetCommittingBuffer() interface{} { return baseReadTx.committingBuf }
 
 type readTx struct {
 	baseReadTx
@@ -146,6 +268,9 @@ func (rt *readTx) Lock()    { rt.mu.Lock() }
 func (rt *readTx) Unlock()  { rt.mu.Unlock() }
 func (rt *readTx) RLock()   { rt.mu.RLock() }
 func (rt *readTx) RUnlock() { rt.mu.RUnlock() }
+func (rt *readTx) AccessBufferNeedLock() bool {
+	return false
+}
 
 func (rt *readTx) reset() {
 	rt.buckets = make(map[BucketID]*bolt.Bucket)
@@ -165,3 +290,7 @@ func (rt *concurrentReadTx) RLock() {}
 
 // RUnlock signals the end of concurrentReadTx.
 func (rt *concurrentReadTx) RUnlock() { rt.txWg.Done() }
+
+func (rt *concurrentReadTx) AccessBufferNeedLock() bool {
+	return !rt.bufferCopied
+}

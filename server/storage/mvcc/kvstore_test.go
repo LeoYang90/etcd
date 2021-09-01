@@ -871,6 +871,18 @@ type fakeBatchTx struct {
 	rangeRespc chan rangeResp
 }
 
+func (b *fakeBatchTx) UnsafeGetBuffer() interface{} {
+	panic("implement me")
+}
+
+func (b *fakeBatchTx) AccessBufferNeedLock() bool {
+	return false
+}
+
+func (b *fakeBatchTx) UnsafeSeqPutRev(bucket backend.Bucket, key []byte, value []byte, rev int64) {
+	b.UnsafeSeqPut(bucket, key, value)
+}
+
 func (b *fakeBatchTx) Flash2ReadTx(readTx backend.ReadTx) {
 	panic("implement me")
 }
@@ -895,7 +907,15 @@ func (b *fakeBatchTx) UnsafePutAsync(bucket backend.Bucket, key []byte, value []
 func (b *fakeBatchTx) UnsafeSeqPutAsync(bucket backend.Bucket, key []byte, value []byte) {
 	b.Recorder.Record(testutil.Action{Name: "seqput", Params: []interface{}{bucket, key, value}})
 }
+func (b *fakeBatchTx) UnsafeSeqPutAsyncRev(bucket backend.Bucket, key []byte, value []byte, rev int64) {
+	b.Recorder.Record(testutil.Action{Name: "seqput", Params: []interface{}{bucket, key, value}})
+}
 func (b *fakeBatchTx) UnsafeRange(bucket backend.Bucket, key, endKey []byte, limit int64) (keys [][]byte, vals [][]byte) {
+	b.Recorder.Record(testutil.Action{Name: "range", Params: []interface{}{bucket, key, endKey, limit}})
+	r := <-b.rangeRespc
+	return r.keys, r.vals
+}
+func (b *fakeBatchTx) UnsafeRangeWithLock(bucket backend.Bucket, key, endKey []byte, limit int64, backend backend.Backend) (keys [][]byte, vals [][]byte) {
 	b.Recorder.Record(testutil.Action{Name: "range", Params: []interface{}{bucket, key, endKey, limit}})
 	r := <-b.rangeRespc
 	return r.keys, r.vals
@@ -907,6 +927,7 @@ func (b *fakeBatchTx) UnsafeForEach(bucket backend.Bucket, visitor func(k, v []b
 	return nil
 }
 func (b *fakeBatchTx) GetBuffer() interface{} { return nil }
+func (b *fakeBatchTx) GetCommittingBuffer() interface{} { return nil }
 func (b *fakeBatchTx) Commit()                {}
 func (b *fakeBatchTx) CommitAndStop()         {}
 
@@ -918,6 +939,7 @@ func (b *fakeBackend) BatchTx() backend.BatchTx                                 
 func (b *fakeBackend) BatchTxAsync() backend.BatchTxAsync                         { return b.tx }
 func (b *fakeBackend) ReadTx() backend.ReadTx                                     { return b.tx }
 func (b *fakeBackend) ConcurrentReadTx() backend.ReadTx                           { return b.tx }
+func (b *fakeBackend) ConcurrentReadTxNoCopy() backend.ReadTx                     { return b.tx }
 func (b *fakeBackend) Hash(func(bucketName, keyName []byte) bool) (uint32, error) { return 0, nil }
 func (b *fakeBackend) Size() int64                                                { return 0 }
 func (b *fakeBackend) SizeInUse() int64                                           { return 0 }
