@@ -208,8 +208,10 @@ func (baseReadTx *baseReadTx) UnsafeRangeWithLock(bucketType Bucket, key, endKey
 			// backend.readTx.buf has already been updated to a new one by unsafeCommit
 			// batchTxBuffered will write back to the new readTx.buf instead of the baseReadTx.buf
 			// baseReadTx.buf do not need be protected by readTx.mu
-			lockHeld = false
-			baseReadTx.mu.RUnlock()
+			if lockHeld {
+				lockHeld = false
+				baseReadTx.mu.RUnlock()
+			}
 		}
 		if keyRev >= baseReadTx.committingBuf.bufMinRev || endKeyRev >= baseReadTx.committingBuf.bufMinRev {
 			committingKeys, committingVals := baseReadTx.committingBuf.Range(bucketType, key, endKey, limit)
