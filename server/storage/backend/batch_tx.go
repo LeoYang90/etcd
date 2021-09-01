@@ -105,7 +105,7 @@ func (t *batchTx) RUnlock() {
 	panic("unexpected RUnlock")
 }
 
-func (t *batchTx) GetBuffer() interface{} { panic("unexpected batchTx GetBuffer") }
+func (t *batchTx) GetBuffer() interface{}           { panic("unexpected batchTx GetBuffer") }
 func (t *batchTx) GetCommittingBuffer() interface{} { panic("unexpected batchTx GetBuffer") }
 
 func (t *batchTx) UnsafeCreateBucket(bucket Bucket) {

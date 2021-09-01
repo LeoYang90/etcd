@@ -926,10 +926,10 @@ func (b *fakeBatchTx) UnsafeDelete(bucket backend.Bucket, key []byte) {
 func (b *fakeBatchTx) UnsafeForEach(bucket backend.Bucket, visitor func(k, v []byte) error) error {
 	return nil
 }
-func (b *fakeBatchTx) GetBuffer() interface{} { return nil }
+func (b *fakeBatchTx) GetBuffer() interface{}           { return nil }
 func (b *fakeBatchTx) GetCommittingBuffer() interface{} { return nil }
-func (b *fakeBatchTx) Commit()                {}
-func (b *fakeBatchTx) CommitAndStop()         {}
+func (b *fakeBatchTx) Commit()                          {}
+func (b *fakeBatchTx) CommitAndStop()                   {}
 
 type fakeBackend struct {
 	tx *fakeBatchTx

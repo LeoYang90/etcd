@@ -257,7 +257,7 @@ func (baseReadTx *baseReadTx) UnsafeRangeWithLock(bucketType Bucket, key, endKey
 	return append(k2, keys...), append(v2, vals...)
 }
 
-func (baseReadTx *baseReadTx) GetBuffer() interface{} { return baseReadTx.buf }
+func (baseReadTx *baseReadTx) GetBuffer() interface{}           { return baseReadTx.buf }
 func (baseReadTx *baseReadTx) GetCommittingBuffer() interface{} { return baseReadTx.committingBuf }
 
 type readTx struct {
