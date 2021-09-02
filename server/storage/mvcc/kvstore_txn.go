@@ -115,7 +115,7 @@ func (tw *storeTxnWrite) UpdateReadView() {
 	if len(tw.changes) > 0 {
 		readTx := tw.s.b.ReadTx()
 		readTx.Lock()
-		tw.batchTxAsync.Flash2ReadTx(tw.tx)
+		tw.batchTxAsync.Flash2ReadTx(readTx)
 		readTx.Unlock()
 	}
 
