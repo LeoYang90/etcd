@@ -38,6 +38,15 @@ func (txb *txBuffer) reset() {
 	}
 }
 
+func (txb *txBuffer) isEmpty() bool {
+	for _, v := range txb.buckets {
+		if v.used != 0 {
+			return false
+		}
+	}
+	return true
+}
+
 // txWriteBuffer buffers writes of pending updates that have not yet committed.
 type txWriteBuffer struct {
 	txBuffer

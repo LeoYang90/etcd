@@ -112,14 +112,17 @@ func (s *store) WriteAsync(trace *traceutil.Trace) TxnWrite {
 }
 
 func (tw *storeTxnWrite) UpdateReadView() {
-	if tw.tx == nil {
+	if len(tw.changes) > 0 {
 		readTx := tw.s.b.ReadTx()
-		readTx.RLock()
-		tw.tx = readTx
+		readTx.Lock()
+		tw.batchTxAsync.Flash2ReadTx(tw.tx)
+		readTx.Unlock()
 	}
 
-	if len(tw.changes) > 0 {
-		tw.batchTxAsync.Flash2ReadTx(tw.tx)
+	if tw.tx == nil {
+		readTx := tw.s.b.ConcurrentReadTxNoCopy()
+		readTx.RLock()
+		tw.tx = readTx
 	}
 }
 

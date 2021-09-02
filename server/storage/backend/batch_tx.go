@@ -455,7 +455,7 @@ func (t *batchTxBufferedAsync) LockAsync() {
 }
 
 func (t *batchTxBufferedAsync) UnlockAsync() {
-	if t.asyncBufPending != 0 {
+	if t.asyncBufPending != 0 && !t.asyncBuf.isEmpty() {
 		t.backend.readTx.Lock() // blocks txReadBuffer for writing.
 		t.asyncBuf.writeback(t.backend.readTx.buf)
 		t.backend.readTx.Unlock()

@@ -450,7 +450,7 @@ func (a *applierV3backend) Txn(ctx context.Context, rt *pb.TxnRequest) (*pb.TxnR
 	// ConcurrentReadTx to avoid extra overhead of copying buffer.
 	var txn mvcc.TxnWrite
 	if isWrite && a.s.Cfg.ExperimentalTxnModeWriteWithSharedBuffer {
-		txn = mvcc.NewReadOnlyTxnWrite(a.s.KV().Read(mvcc.SharedBufReadTxMode, trace))
+		txn = mvcc.NewReadOnlyTxnWrite(a.s.KV().Read(mvcc.ConcurrentReadTxNoCopyMode, trace))
 	} else {
 		txn = mvcc.NewReadOnlyTxnWrite(a.s.KV().Read(mvcc.ConcurrentReadTxNoCopyMode, trace))
 	}
