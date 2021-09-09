@@ -49,7 +49,7 @@ func (kv *kvPrefix) Put(ctx context.Context, key, val string, opts ...clientv3.O
 
 func (kv *kvPrefix) Get(ctx context.Context, key string, opts ...clientv3.OpOption) (*clientv3.GetResponse, error) {
 	if len(key) == 0 && !(clientv3.IsOptsWithFromKey(opts) || clientv3.IsOptsWithPrefix(opts)) {
-		return nil, rpctypes.ErrEmptyKey
+		return nil, rpctypes.ErrValueProvided
 	}
 	r, err := kv.KV.Do(ctx, kv.prefixOp(clientv3.OpGet(key, opts...)))
 	if err != nil {
