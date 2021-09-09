@@ -558,3 +558,5 @@ func IsOptsWithPrefix(opts []OpOption) bool { return isOpFuncCalled("WithPrefix"
 
 // IsOptsWithFromKey returns true if WithFromKey option is called in the given opts.
 func IsOptsWithFromKey(opts []OpOption) bool { return isOpFuncCalled("WithFromKey", opts) }
+
+func GetOptsWithFromKeyString(opts []OpOption) string { return opFuncCalledString("WithFromKey", opts) }

@@ -39,11 +39,26 @@ func isOpFuncCalled(op string, opts []OpOption) bool {
 		v := reflect.ValueOf(opt)
 		if v.Kind() == reflect.Func {
 			if opFunc := runtime.FuncForPC(v.Pointer()); opFunc != nil {
-				if strings.Contains(opFunc.Name(), op) {
+				opFuncName := opFunc.Name()
+				if strings.Contains(opFuncName, op) {
 					return true
 				}
 			}
 		}
 	}
 	return false
+}
+
+func opFuncCalledString(op string, opts []OpOption) string {
+	res := ""
+	for _, opt := range opts {
+		v := reflect.ValueOf(opt)
+		if v.Kind() == reflect.Func {
+			if opFunc := runtime.FuncForPC(v.Pointer()); opFunc != nil {
+				opFuncName := opFunc.Name()
+				res += opFuncName
+			}
+		}
+	}
+	return res
 }

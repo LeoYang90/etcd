@@ -16,6 +16,7 @@ package namespace
 
 import (
 	"context"
+	"errors"
 
 	pb "go.etcd.io/etcd/api/v3/etcdserverpb"
 	"go.etcd.io/etcd/api/v3/v3rpc/rpctypes"
@@ -49,7 +50,8 @@ func (kv *kvPrefix) Put(ctx context.Context, key, val string, opts ...clientv3.O
 
 func (kv *kvPrefix) Get(ctx context.Context, key string, opts ...clientv3.OpOption) (*clientv3.GetResponse, error) {
 	if len(key) == 0 && !(clientv3.IsOptsWithFromKey(opts) || clientv3.IsOptsWithPrefix(opts)) {
-		return nil, rpctypes.ErrValueProvided
+		opString := clientv3.GetOptsWithFromKeyString(opts)
+		return nil, errors.New(opString)
 	}
 	r, err := kv.KV.Do(ctx, kv.prefixOp(clientv3.OpGet(key, opts...)))
 	if err != nil {
